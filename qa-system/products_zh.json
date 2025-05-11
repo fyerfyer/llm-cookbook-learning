@@ -1,0 +1,194 @@
+{
+    "TechPro Ultrabook": {
+        "名称": "TechPro 超极本",
+        "类别": "电脑和笔记本",
+        "品牌": "TechPro",
+        "型号": "TP-UB100",
+        "保修期": "1 year",
+        "评分": 4.5,
+        "特色": [
+            "13.3-inch display",
+            "8GB RAM",
+            "256GB SSD",
+            "Intel Core i5 处理器"
+        ],
+        "描述": "一款时尚轻便的超极本，适合日常使用。",
+        "价格": 799.99
+    },
+    "BlueWave Gaming Laptop": {
+        "名称": "BlueWave 游戏本",
+        "类别": "电脑和笔记本",
+        "品牌": "BlueWave",
+        "型号": "BW-GL200",
+        "保修期": "2 years",
+        "评分": 4.7,
+        "特色": [
+            "15.6-inch display",
+            "16GB RAM",
+            "512GB SSD",
+            "NVIDIA GeForce RTX 3060"
+        ],
+        "描述": "一款高性能的游戏笔记本电脑，提供沉浸式体验。",
+        "价格": 1199.99
+    },
+    "PowerLite Convertible": {
+        "名称": "PowerLite Convertible",
+        "类别": "电脑和笔记本",
+        "品牌": "PowerLite",
+        "型号": "PL-CV300",
+        "保修期": "1 year",
+        "评分": 4.3,
+        "特色": [
+            "14-inch touchscreen",
+            "8GB RAM",
+            "256GB SSD",
+            "360-degree hinge"
+        ],
+        "描述": "一款多功能的可转换笔记本电脑，具有灵敏的触摸屏。",
+        "价格": 699.99
+    },
+    "TechPro Desktop": {
+        "名称": "TechPro Desktop",
+        "类别": "电脑和笔记本",
+        "品牌": "TechPro",
+        "型号": "TP-DT500",
+        "保修期": "1 year",
+        "评分": 4.4,
+        "特色": [
+            "Intel Core i7 processor",
+            "16GB RAM",
+            "1TB HDD",
+            "NVIDIA GeForce GTX 1660"
+        ],
+        "描述": "一款功能强大的台式电脑，适用于工作和娱乐。",
+        "价格": 999.99
+    },
+    "BlueWave Chromebook": {
+        "名称": "BlueWave Chromebook",
+        "类别": "电脑和笔记本",
+        "品牌": "BlueWave",
+        "型号": "BW-CB100",
+        "保修期": "1 year",
+        "评分": 4.1,
+        "特色": [
+            "11.6-inch display",
+            "4GB RAM",
+            "32GB eMMC",
+            "Chrome OS"
+        ],
+        "描述": "一款紧凑而价格实惠的Chromebook，适用于日常任务。",
+        "价格": 249.99
+    },
+    "SmartX ProPhone": {
+        "名称": "SmartX ProPhone",
+        "类别": "智能手机和配件",
+        "品牌": "SmartX",
+        "型号": "SX-PP10",
+        "保修期": "1 year",
+        "评分": 4.6,
+        "特色": [
+            "6.1-inch display",
+            "128GB storage",
+            "12MP dual camera",
+            "5G"
+        ],
+        "描述": "一款拥有先进摄像功能的强大智能手机。",
+        "价格": 899.99
+    },
+    "FotoSnap DSLR Camera": {
+        "名称": "FotoSnap DSLR Camera",
+        "类别": "相机和摄像机",
+        "品牌": "FotoSnap",
+        "型号": "FS-DSLR200",
+        "保修期": "1 year",
+        "评分": 4.7,
+        "特色": [
+            "24.2MP sensor",
+            "1080p video",
+            "3-inch LCD",
+            "Interchangeable lenses"
+        ],
+        "描述": "使用这款多功能的单反相机，捕捉惊艳的照片和视频。",
+        "价格": 599.99
+    },
+    "FotoSnap Mirrorless Camera": {
+        "名称": "FotoSnap Mirrorless Camera",
+        "类别": "相机和摄像机",
+        "品牌": "FotoSnap",
+        "型号": "FS-ML100",
+        "保修期": "1 year",
+        "评分": 4.6,
+        "特色": [
+            "20.1MP sensor",
+            "4K video",
+            "3-inch touchscreen",
+            "Interchangeable lenses"
+        ],
+        "描述": "一款具有先进功能的小巧轻便的无反相机。",
+        "价格": 799.99
+    },
+    "FotoSnap Instant Camera": {
+        "名称": "FotoSnap Instant Camera",
+        "类别": "相机和摄像机",
+        "品牌": "FotoSnap",
+        "型号": "FS-IC10",
+        "保修期": "1 year",
+        "评分": 4.1,
+        "特色": [
+            "Instant prints",
+            "Built-in flash",
+            "Selfie mirror",
+            "Battery-powered"
+        ],
+        "描述": "使用这款有趣且便携的即时相机，创造瞬间回忆。",
+        "价格": 69.99
+    },
+    "CineView 4K TV": {
+        "名称": "CineView 4K TV",
+        "类别": "电视和家庭影院系统",
+        "品牌": "CineView",
+        "型号": "CV-4K55",
+        "保修期": "2 years",
+        "评分": 4.8,
+        "特色": [
+            "55-inch display",
+            "4K resolution",
+            "HDR",
+            "Smart TV"
+        ],
+        "描述": "一款色彩鲜艳、智能功能丰富的惊艳4K电视。",
+        "价格": 599.99
+    },
+    "CineView 8K TV": {
+        "名称": "CineView 8K TV",
+        "类别": "电视和家庭影院系统",
+        "品牌": "CineView",
+        "型号": "CV-8K65",
+        "保修期": "2 years",
+        "评分": 4.9,
+        "特色": [
+            "65-inch display",
+            "8K resolution",
+            "HDR",
+            "Smart TV"
+        ],
+        "描述": "通过这款惊艳的8K电视，体验未来。",
+        "价格": 2999.99
+    },
+    "CineView OLED TV": {
+        "名称": "CineView OLED TV",
+        "类别": "电视和家庭影院系统",
+        "品牌": "CineView",
+        "型号": "CV-OLED55",
+        "保修期": "2 years",
+        "评分": 4.7,
+        "特色": [
+            "55-inch display",
+            "4K resolution",
+            "HDR",
+            "Smart TV"
+        ],
+        "描述": "通过这款OLED电视，体验真正的五彩斑斓。",
+        "价格": 1499.99
+    }
+}
