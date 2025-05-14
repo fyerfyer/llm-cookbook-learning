@@ -174,3 +174,5 @@ cython_debug/
 .pypirc
 *.vscode
 *.idea
+
+langchain-api文档.txt
