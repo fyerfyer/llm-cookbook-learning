@@ -35,3 +35,5 @@ AttributeError: module 'langchain' has no attribute 'verbose'
 ```
 
 因此在`model_demo`中直接自己封装了llm client的invoke方法来处理模型调用。
+
+> 对书中的langchain.memory之类的也是这样，貌似直接从langchain import就会出现不兼容问题，需要注意。
