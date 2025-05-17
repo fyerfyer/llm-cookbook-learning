@@ -175,4 +175,5 @@ cython_debug/
 *.vscode
 *.idea
 
-langchain-api文档.txt
+langchain-memory-api文档.txt
+langchain-chain-api文档.txt
