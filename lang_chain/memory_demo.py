@@ -1,358 +1,227 @@
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import START, MessagesState, StateGraph
-
+import os
+import pandas as pd
 from dotenv import load_dotenv, find_dotenv
 
-# 从helper模块导入工具函数
+from langchain_community.document_loaders import CSVLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import DocArrayInMemorySearch, FAISS
+from langchain.chains import RetrievalQA
+
 from helper.helper import create_client
 
-class LLMBuilder:
-    """创建自定义语言模型接口，避开langchain兼容性问题"""
+# 使用LangChain嵌入组件
+from langchain_openai import OpenAIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
+
+
+class CustomChatModel:
+    """使用helper通过Qwen实现的自定义聊天模型"""
 
     def __init__(self, temperature=0.0):
         self.client = create_client()
         self.temperature = temperature
 
-    def create_llm(self):
-        """创建自定义语言模型接口"""
+    def call_as_llm(self, prompt):
+        """实现类似LangChain ChatModels的call_as_llm方法"""
+        messages = [{"role": "user", "content": prompt}]
 
-        def invoke(messages):
-            # 转换LangChain消息格式到通义千问支持的格式
-            api_messages = []
+        response = self.client.chat.completions.create(
+            model="qwen-turbo",
+            messages=messages,
+            temperature=self.temperature,
+        )
+        return response.choices[0].message.content
 
-            # 处理ChatPromptValue对象 - 这是从ChatPromptTemplate传来的
-            from langchain_core.prompt_values import ChatPromptValue
-            if isinstance(messages, ChatPromptValue):
-                # 从ChatPromptValue中提取消息
-                messages_list = messages.to_messages()
 
-                for msg in messages_list:
-                    role = msg.type
-                    # 映射角色
-                    if role == "human":
-                        role = "user"
-                    elif role == "ai":
-                        role = "assistant"
-                    # 确保角色有效
-                    if role not in ["system", "assistant", "user", "tool", "function"]:
-                        role = "user"
-                    api_messages.append({"role": role, "content": msg.content})
-            # 处理tuple格式
-            elif len(messages) == 1 and isinstance(messages[0], tuple) and messages[0][0] == "messages":
-                # 从tuple中获取实际消息列表
-                msg_list = messages[0][1]
+class DocumentProcessor:
+    """处理文档加载和处理"""
 
-                # 处理列表中的每个消息
-                for msg in msg_list:
-                    role = msg.type
-                    if role == "human":
-                        role = "user"
-                    elif role == "ai":
-                        role = "assistant"
-                    if role not in ["system", "assistant", "user", "tool", "function"]:
-                        role = "user"
-                    api_messages.append({"role": role, "content": msg.content})
-            # 处理常规消息列表
-            else:
-                for idx, msg in enumerate(messages):
+    def __init__(self, file_path):
+        self.file_path = file_path
+        # 修复：为CSVLoader添加编码参数
+        self.loader = CSVLoader(file_path=file_path, encoding="utf-8")
+        self.docs = None
 
-                    if hasattr(msg, 'type'):
-                        role = msg.type
-                        # 确保角色名称正确映射到API支持的值
-                        if role == "human":
-                            role = "user"
-                        elif role == "ai":
-                            role = "assistant"
-                        # 添加确保角色名为有效值的检查
-                        if role not in ["system", "assistant", "user", "tool", "function"]:
-                            role = "user"
-                        api_messages.append({"role": role, "content": msg.content})
-                    elif isinstance(msg, tuple):
-                        role, content = msg
-                        # 将LangChain的角色名映射到通义千问支持的角色
-                        if role == "human":
-                            role = "user"
-                        api_messages.append({"role": role, "content": content})
+    def load_documents(self):
+        """从文件加载文档"""
+        self.docs = self.loader.load()
+        return self.docs
 
-            api_response = self.client.chat.completions.create(
-                model="qwen-turbo",
-                messages=api_messages,
-                temperature=self.temperature,
+    def split_documents(self, chunk_size=1000, chunk_overlap=0):
+        """将文档分割成块"""
+        if not self.docs:
+            self.load_documents()
+
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap
+        )
+        return text_splitter.split_documents(self.docs)
+
+    def preview_data(self):
+        """显示数据预览"""
+        df = pd.read_csv(self.file_path, usecols=[1, 2], encoding="utf-8")  # 这里也添加编码
+        return df.head(5)
+
+
+class EmbeddingEngine:
+    """使用LangChain处理嵌入和向量存储"""
+
+    def __init__(self, embedding_model="openai"):
+        """使用指定的嵌入模型初始化"""
+        if embedding_model == "openai":
+            # 用于实际的OpenAI API
+            self.embeddings = OpenAIEmbeddings()
+        elif embedding_model == "local":
+            # 用于本地模型
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/all-MiniLM-L6-v2"
             )
-            return api_response.choices[0].message.content
+        else:
+            raise ValueError(f"不支持的嵌入模型: {embedding_model}")
 
-        return invoke
+    def create_vector_store(self, docs, vector_store_type="docarray"):
+        """从文档创建向量存储"""
+        if vector_store_type == "docarray":
+            return DocArrayInMemorySearch.from_documents(docs, self.embeddings)
+        elif vector_store_type == "faiss":
+            return FAISS.from_documents(docs, self.embeddings)
+        else:
+            raise ValueError(f"不支持的向量存储类型: {vector_store_type}")
 
-
-class ConversationBufferDemo:
-    """演示基本的对话缓存"""
-
-    def __init__(self, temperature=0.0):
-        self.llm_builder = LLMBuilder(temperature=temperature)
-        self.llm = self.llm_builder.create_llm()
-        self.prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content="你是一个有帮助的助手，能够清晰记住对话历史。"),
-            MessagesPlaceholder(variable_name="messages"),
-        ])
-        self.chain = self.prompt | self.llm
-
-    def chat(self, user_message):
-        """使用简单的消息传递进行对话"""
-        return self.chain.invoke({"messages": user_message})
-
-    def demonstrate_manual_memory(self):
-        """演示手动添加和检索对话记忆"""
-        print("\n=== 手动对话记忆演示 ===")
-
-        # 创建一些示例消息
-        messages = [
-            HumanMessage(content="你好，我叫皮皮鲁"),
-            AIMessage(content="你好啊，皮皮鲁！很高兴认识你。我是一个AI助手，有什么能帮到你吗？"),
-            HumanMessage(content="1+1等于多少？"),
-            AIMessage(content="1+1等于2。"),
-        ]
-
-        # 添加新消息并获取回复
-        response = self.chat(messages + [HumanMessage(content="我叫什么名字？")])
-        print("\n用户: 我叫什么名字？")
-        print(f"AI: {response}")
-
-        # 添加不相关问题，验证记忆能力
-        messages.append(HumanMessage(content="我叫什么名字？"))
-        messages.append(AIMessage(content=response))
-        response = self.chat(messages + [HumanMessage(content="2+2等于多少？")])
-        print("\n用户: 2+2等于多少？")
-        print(f"AI: {response}")
-
-        # 再次询问名字，测试记忆保留
-        messages.append(HumanMessage(content="2+2等于多少？"))
-        messages.append(AIMessage(content=response))
-        response = self.chat(messages + [HumanMessage(content="再告诉我我的名字")])
-        print("\n用户: 再告诉我我的名字")
-        print(f"AI: {response}")
+    def get_sample_embedding(self, text):
+        """为文本生成样本嵌入"""
+        embed_vector = self.embeddings.embed_query(text)
+        return {
+            "length": len(embed_vector),
+            "first_5_elements": embed_vector[:5]
+        }
 
 
-class MemoryManager:
-    """管理不同类型的记忆实现"""
+class DocumentQA:
+    """使用嵌入和检索器的文档问答"""
 
-    def __init__(self, temperature=0.0):
-        self.llm_builder = LLMBuilder(temperature)
-        self.llm = self.llm_builder.create_llm()
+    def __init__(self, vector_store, llm=None):
+        self.vector_store = vector_store
+        self.retriever = vector_store.as_retriever()
+        self.llm = llm if llm else CustomChatModel()
 
-    def demonstrate_langgraph_memory(self):
-        """演示使用LangGraph的内存状态管理"""
-        print("\n=== LangGraph记忆管理演示 ===")
+    def similarity_search(self, query, k=4):
+        """在向量存储上执行相似度搜索"""
+        docs = self.vector_store.similarity_search(query, k=k)
+        return docs
 
-        # 创建工作流图
-        workflow = StateGraph(state_schema=MessagesState)
+    def direct_qa(self, query, k=4):
+        """使用检索到的文档和LLM进行直接问答"""
+        docs = self.similarity_search(query, k=k)
+        # 合并文档内容
+        doc_content = "".join([doc.page_content for doc in docs])
 
-        # 定义调用模型的函数
-        def call_model(state: MessagesState):
-            system_prompt = "你是一个有帮助的助手。尽力回答所有问题。"
-            messages = [SystemMessage(content=system_prompt)] + state["messages"]
-            response = self.llm(messages)
-            return {"messages": response}
+        # 将查询发送给LLM
+        response = self.llm.call_as_llm(f"{doc_content}\n\n问题: {query}")
+        return response
 
-        # 定义节点和边
-        workflow.add_node("model", call_model)
-        workflow.add_edge(START, "model")
-
-        # 添加简单的内存存储器
-        memory = MemorySaver()
-        app = workflow.compile(checkpointer=memory)
-
-        # 执行对话
-        print("\n第一轮对话:")
-        result = app.invoke(
-            {"messages": [HumanMessage(content="你好，我叫皮皮鲁")]},
-            config={"configurable": {"thread_id": "demo1"}}
+    def retrieval_qa_chain(self, query, chain_type="stuff", verbose=False):
+        """创建并使用检索QA链"""
+        qa = RetrievalQA.from_chain_type(
+            llm=self.llm,
+            chain_type=chain_type,
+            retriever=self.retriever,
+            verbose=verbose
         )
-        print(f"用户: 你好，我叫皮皮鲁")
-        print(f"AI: {result['messages'][-1].content}")
+        return qa.run(query)
 
-        print("\n第二轮对话:")
-        result = app.invoke(
-            {"messages": [HumanMessage(content="1+1等于多少?")]},
-            config={"configurable": {"thread_id": "demo1"}}
-        )
-        print(f"用户: 1+1等于多少?")
-        print(f"AI: {result['messages'][-1].content}")
 
-        print("\n第三轮对话 (测试记忆):")
-        result = app.invoke(
-            {"messages": [HumanMessage(content="我叫什么名字?")]},
-            config={"configurable": {"thread_id": "demo1"}}
-        )
-        print(f"用户: 我叫什么名字?")
-        print(f"AI: {result['messages'][-1].content}")
+def create_sample_csv(output_file="lang_chain/data/OutdoorClothingCatalog_sample.csv"):
+    """创建用于演示的示例CSV文件"""
+    # 确保目录存在
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
-    def demonstrate_window_memory(self):
-        """演示窗口记忆实现"""
-        print("\n=== 窗口记忆演示 (k=1) ===")
+    # 创建示例数据
+    data = [
+        ["Women's Campside Oxfords", "This ultracomfortable lace-to-toe Oxford boasts a super-soft canvas, thick cushioning, and quality construction for a broken-in feel from the first time you put them on. \n\nSize & Fit: Order regular shoe size. For half sizes not offered, order up to next whole size. \n\nSpecs: Approx. weight: 1 lb.1 oz. per pair. \n\nConstruction: Soft canvas material for a broken-in feel and look. Comfortable EVA innersole with Cleansport NXT® antimicrobial odor control. Vintage hunt, fish and camping motif on innersole. Moderate arch contour of innersole. EVA foam midsole for cushioning and support. Chain-tread-inspired molded rubber outsole with modified chain-tread pattern. Imported. \n\nQuestions? Please contact us for any inquiries."],
+        ["Men's Tropical Plaid Short-Sleeve Shirt", "This sun-protection shirt has a UPF 50+ rating – the highest rated sun protection possible, blocking 98% of the sun's harmful rays. \n\nSize & Fit: Slightly Fitted: Softly shapes the body. Falls at hip. \n\nFabric & Care: 100% polyester. Machine wash and dry. \n\nAdditional Features: Wrinkle-resistant. Front and back cape venting lets in cool breezes. Two front bellows pockets. Imported. \n\nSun Protection That Won't Wear Off: Our high-performance fabric provides SPF 50+ sun protection, blocking 98% of the sun's harmful rays."],
+        ["Men's Plaid Tropic Shirt, Short-Sleeve", "Our popular tropics shirt is back with the same great features and UPF 50+ sun protection – now in a new, all-recycled quick-dry fabric. \n\nSize & Fit: Slightly Fitted: Softly shapes the body. \n\nFabric & Care: 52% polyester, 48% nylon. Machine wash and dry. \n\nAdditional Features: UPF 50+ rated – the highest rated sun protection possible. Wrinkle-free. Recycled, high-performance QuickDry™ fabric quickly evaporates perspiration. Front and back cape venting lets in cool breezes. Two front bellows pockets. Imported."],
+        ["Girls' Ocean Breeze Long-Sleeve Stripe Shirt", "Our moisture-wicking shirt keeps kids comfortable playing by the ocean or in it. \n\nSize & Fit: Slightly Fitted: Softly shapes the body. \n\nFabric & Care: Nylon Lycra®-elastane blend. UPF 50+ rated, the highest rated sun protection possible. Machine wash and dry. \n\nAdditional Features: Quick drying and fade resistant. Sand washes out easily. Holds its shape after multiple washings. Durable seawater- and chlorine-resistant fabric retains its color. Easy to coordinate with any of our girls' swim collection pieces. Imported."],
+        ["Men's TropicVibe Shirt, Short-Sleeve", "This Men's sun-protection shirt with built-in UPF 50+ has the lightweight feel you want and the coverage you need when the air is hot and the UV rays are strong. \n\nSize & Fit: Traditional Fit: Relaxed through the chest, sleeve and waist. \n\nFabric & Care: Shell: 71% Nylon, 29% Polyester. Lining: 100% Polyester knit mesh. UPF 50+ rated – the highest rated sun protection possible. Machine wash and dry. \n\nAdditional Features: Wrinkle resistant. Front and back cape venting lets in cool breezes. Two front bellows pockets. Imported. \n\nSun Protection That Won't Wear Off: Our high-performance fabric provides SPF 50+ sun protection, blocking 98% of the sun's harmful rays."],
+        ["Recycled Waterhog Dog Mat, Chevron Weave", "Protect your floors from spills and splashing with our super-absorbent and ultra-durable Waterhog mat. \n\nSize & Dimensions: Small: 18\" x 28\". Medium: 22\"W x 35\"L. Large: 27\"W x 45\"L. X-Large: 36\"W x 66\"L. \n\nFeatures: Super-absorbent, quick-drying and resistant to mold and mildew. Holds up to 1½ gallons of water per square yard. Rubber backing keeps mat in place and prevents leaking. Nonskid surface prevents slipping. Stain and fade resistant. \n\nConstruction: 25% recycled polypropylene fiber top. 20% recycled SBR rubber backing. Made in USA."],
+        ["Infant and Toddler Girls' Coastal Chill Swimsuit, Two-Piece", "She'll love the bright colors, ruffles and exciting design of this two-piece. But you'll love that it has a UPF 50+ rating, blocking 98% of the sun's harmful rays. \n\nSize & Fit: Fits close to body for comfort in the water, with room to grow. \n\nFabric & Care: 82% nylon, 18% Lycra® spandex. UPF 50+ rated – the highest rated sun protection possible. Hand wash, line dry. \n\nAdditional Features: Four-way-stretch fabric is sand and chlorine resistant. Holds its shape even after multiple washings. Cute, authentic surfwear styling she'll love to wear. Imported."],
+        ["Refresh Swimwear, V-Neck Tankini Contrasts", "Whether you're going for a swim or heading out for a paddleboard session, our tankini provides the comfort, coverage and confidence you need. \n\nSize & Fit: Fits close to the body for comfortable movement without bulk. Falls at high hip. \n\nFabric & Care: 82% nylon, 18% Lycra® spandex. UPF 50+ rated. Hand wash, line dry. \n\nAdditional Features: Empire seam with gathers for a feminine, supportive fit. Lightly padded cups provide shape and coverage. Front-facing seams are figure flattering. Holds its shape and color even after multiple washings. Sand quickly releases from fabric. Side seams measure 6\". Imported."],
+        ["EcoFlex 3L Storm Pants", "Our new TEK O2 technology makes our four-season pants more breathable than ever, keeping you comfortable and protected from the weather no matter what Mother Nature throws at you. \n\nSize & Fit: Fit comfortably over base and middle layers. Inseam: 32\". \n\nFabric & Care: 100% nylon with a waterproof breathable laminate membrane. Machine wash and dry. \n\nAdditional Features: Waterproof seams are fully sealed. Articulated knees allow for excellent mobility. Elastic waist with a drawcord for an adjustable fit. Ankle zippers for easy-on, easy-off versatility. Zippered side pockets provide secure storage. Made in USA of imported fabrics."],
+    ]
 
-        # 创建有限窗口大小的工作流
-        workflow = StateGraph(state_schema=MessagesState)
-
-        # 定义带窗口限制的调用模型函数
-        def call_model_with_window(state: MessagesState):
-            # 只保留最新的一条消息
-            if len(state["messages"]) > 1:
-                recent_messages = state["messages"][-1:]
-            else:
-                recent_messages = state["messages"]
-
-            system_prompt = "你是一个有帮助的助手。尽力回答所有问题。"
-            messages = [SystemMessage(content=system_prompt)] + recent_messages
-            response = self.llm(messages)
-            return {"messages": response}
-
-        # 定义节点和边
-        workflow.add_node("model", call_model_with_window)
-        workflow.add_edge(START, "model")
-
-        # 添加简单的内存存储器
-        memory = MemorySaver()
-        app = workflow.compile(checkpointer=memory)
-
-        # 执行对话序列
-        print("\n第一轮对话:")
-        result = app.invoke(
-            {"messages": [HumanMessage(content="你好，我叫皮皮鲁")]},
-            config={"configurable": {"thread_id": "demo2"}}
-        )
-        print(f"用户: 你好，我叫皮皮鲁")
-        print(f"AI: {result['messages'][-1].content}")
-
-        print("\n第二轮对话:")
-        result = app.invoke(
-            {"messages": [HumanMessage(content="1+1等于多少?")]},
-            config={"configurable": {"thread_id": "demo2"}}
-        )
-        print(f"用户: 1+1等于多少?")
-        print(f"AI: {result['messages'][-1].content}")
-
-        print("\n第三轮对话 (测试记忆限制):")
-        result = app.invoke(
-            {"messages": [HumanMessage(content="我叫什么名字?")]},
-            config={"configurable": {"thread_id": "demo2"}}
-        )
-        print(f"用户: 我叫什么名字?")
-        print(f"AI: {result['messages'][-1].content}")
-
-    def demonstrate_summary_memory(self):
-        """演示摘要记忆实现"""
-        print("\n=== 摘要记忆演示 ===")
-
-        # 创建工作流图
-        workflow = StateGraph(state_schema=MessagesState)
-
-        # 用于保存摘要的变量
-        current_summary = ""
-
-        # 定义调用模型的函数，包括摘要生成
-        def call_model_with_summary(state: MessagesState):
-            nonlocal current_summary
-
-            system_prompt = "你是一个有帮助的助手。尽力回答所有问题。"
-            system_message = SystemMessage(content=system_prompt)
-
-            # 如果消息历史足够长，生成摘要
-            if len(state["messages"]) >= 4 and not current_summary:
-                # 创建摘要提示
-                summary_prompt = "请将以上对话内容总结成一个简短的摘要，保留重要的细节。"
-                summary_message = self.llm([SystemMessage(content=system_prompt)] +
-                                           state["messages"] +
-                                           [HumanMessage(content=summary_prompt)])
-                current_summary = summary_message
-
-            # 使用最新消息和摘要
-            if current_summary:
-                last_human_message = state["messages"][-1]
-                messages = [system_message,
-                            SystemMessage(content=f"对话摘要: {current_summary}"),
-                            last_human_message]
-            else:
-                messages = [system_message] + state["messages"]
-
-            response = self.llm(messages)
-            return {"messages": response}
-
-        # 定义节点和边
-        workflow.add_node("model", call_model_with_summary)
-        workflow.add_edge(START, "model")
-
-        # 添加简单的内存存储器
-        memory = MemorySaver()
-        app = workflow.compile(checkpointer=memory)
-
-        # 创建一段日程安排的长文本
-        schedule = """在八点你和你的产品团队有一个会议。
-        你需要做一个PPT。
-        上午9点到12点你需要忙于LangChain。
-        Langchain是一个有用的工具，因此你的项目进展的非常快。
-        中午，在意大利餐厅与一位开车来的顾客共进午餐
-        走了一个多小时的路程与你见面，只为了解最新的 AI。
-        确保你带了笔记本电脑可以展示最新的 LLM 样例."""
-
-        # 执行对话序列
-        print("\n第一轮对话:")
-        result = app.invoke(
-            {"messages": [HumanMessage(content="你好，我叫皮皮鲁")]},
-            config={"configurable": {"thread_id": "demo3"}}
-        )
-        print(f"用户: 你好，我叫皮皮鲁")
-        print(f"AI: {result['messages'][-1].content}")
-
-        print("\n第二轮对话:")
-        result = app.invoke(
-            {"messages": [HumanMessage(content="很高兴和你成为朋友！")]},
-            config={"configurable": {"thread_id": "demo3"}}
-        )
-        print(f"用户: 很高兴和你成为朋友！")
-        print(f"AI: {result['messages'][-1].content}")
-
-        print("\n第三轮对话:")
-        result = app.invoke(
-            {"messages": [HumanMessage(content="今天的日程安排是什么？")]},
-            config={"configurable": {"thread_id": "demo3"}}
-        )
-        print(f"用户: 今天的日程安排是什么？")
-        print(f"AI: {result['messages'][-1].content}")
-
-        # 添加日程安排回复，触发摘要生成
-        result = app.invoke(
-            {"messages": [AIMessage(content=schedule)]},
-            config={"configurable": {"thread_id": "demo3"}}
-        )
-
-        # 生成摘要后的新问题
-        print("\n第四轮对话 (基于摘要):")
-        result = app.invoke(
-            {"messages": [HumanMessage(content="展示什么样的样例最好呢？")]},
-            config={"configurable": {"thread_id": "demo3"}}
-        )
-        print(f"用户: 展示什么样的样例最好呢？")
-        print(f"AI: {result['messages'][-1].content}")
+    # 创建DataFrame并保存为CSV - 使用UTF-8编码
+    df = pd.DataFrame(data, columns=['name', 'description'])
+    df.to_csv(output_file, index=True, encoding='utf-8')  # 添加UTF-8编码
+    print(f"示例CSV创建在: {output_file}")
+    return output_file
 
 
 def main():
-    """主函数，运行各种记忆演示"""
+    """演示文档QA功能的主函数"""
     load_dotenv(find_dotenv())  # 加载环境变量
 
-    print("=== LangChain记忆组件演示 ===")
+    # 如果需要则创建示例数据
+    file_path = "lang_chain/data/OutdoorClothingCatalog_sample.csv"
+    if not os.path.exists(file_path):
+        file_path = create_sample_csv(file_path)
+    else:
+        # 如果文件存在但可能有编码问题，则重新创建
+        file_path = create_sample_csv(file_path)
 
-    # 演示基本的消息传递
-    convo_demo = ConversationBufferDemo()
-    convo_demo.demonstrate_manual_memory()
+    print("=== 使用LangChain嵌入的文档QA系统 ===\n")
 
-    # 演示不同类型的记忆机制
-    memory_manager = MemoryManager()
-    memory_manager.demonstrate_langgraph_memory()
-    memory_manager.demonstrate_window_memory()
-    memory_manager.demonstrate_summary_memory()
+    # 初始化文档处理器
+    print("步骤1: 加载和处理文档")
+    doc_processor = DocumentProcessor(file_path)
+    docs = doc_processor.load_documents()
+    print(f"从{file_path}加载了{len(docs)}个文档")
+
+    # 显示示例数据
+    df_preview = doc_processor.preview_data()
+    print("\n数据预览:")
+    print(df_preview)
+
+    # 初始化嵌入引擎（使用本地模型以避免API密钥要求）
+    print("\n步骤2: 创建嵌入和向量存储")
+    embedding_engine = EmbeddingEngine(embedding_model="local")
+
+    # 创建向量存储
+    vector_store = embedding_engine.create_vector_store(docs)
+    print("向量存储创建成功")
+
+    # 显示示例嵌入
+    sample_text = "防晒衬衫"
+    embedding_info = embedding_engine.get_sample_embedding(sample_text)
+    print(f"\n'{sample_text}'的示例嵌入:")
+    print(f"向量维度: {embedding_info['length']}")
+    print(f"前5个元素: {embedding_info['first_5_elements']}")
+
+    # 初始化文档QA
+    print("\n步骤3: 设置文档QA系统")
+    llm = CustomChatModel()
+    doc_qa = DocumentQA(vector_store, llm)
+
+    # 执行相似度搜索
+    query = "请推荐一件具有防晒功能的衬衫"
+    print(f"\n执行查询的相似度搜索: '{query}'")
+    results = doc_qa.similarity_search(query, k=2)
+    print(f"找到{len(results)}个相关文档")
+    print("\n第一个匹配的摘录:")
+    print(results[0].page_content[:200], "...\n")
+
+    # 执行直接QA
+    print("步骤4: 使用检索到的文档进行直接QA")
+    direct_answer = doc_qa.direct_qa(query)
+    print(f"\n查询: {query}")
+    print(f"回答:\n{direct_answer}")
+
+    # 执行格式化QA
+    formatted_query = "请用markdown表格的方式列出所有具有防晒功能的衬衫，对每件衬衫描述进行总结"
+    print("\n步骤5: 使用检索链进行格式化QA")
+    print(f"\n查询: {formatted_query}")
+    chain_answer = doc_qa.direct_qa(formatted_query)
+    print(f"回答:\n{chain_answer}")
 
 
 if __name__ == "__main__":

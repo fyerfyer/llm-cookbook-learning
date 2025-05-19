@@ -177,3 +177,6 @@ cython_debug/
 
 langchain-memory-api文档.txt
 langchain-chain-api文档.txt
+langchain-embedding-api文档.txt
+langchain-agent-api文档.txt
+qwen-api.txt

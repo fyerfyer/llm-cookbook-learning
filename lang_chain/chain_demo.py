@@ -1,11 +1,10 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnableSequence, RunnableLambda
+from langchain_core.runnables import RunnableLambda
 from dotenv import load_dotenv, find_dotenv
 
 # 从helper模块导入工具函数
 from helper.helper import create_client
-
 
 class LLMBuilder:
     """创建自定义语言模型接口，避开langchain兼容性问题"""
