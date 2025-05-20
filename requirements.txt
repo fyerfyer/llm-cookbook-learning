@@ -5,8 +5,9 @@ python-dotenv~=1.1.0
 openai~=1.78.0
 setuptools~=80.4.0
 pydantic~=2.11.4
-langchain-core~=0.3.59
-langgraph~=0.4.3
-ipython~=9.2.0
-langchain~=0.3.25
-langchain-community~=0.3.24
+# v3.0
+# langchain-core~=0.3.59
+# langgraph~=0.4.3
+# ipython~=9.2.0
+# langchain~=0.3.25
+# langchain-community~=0.3.24
