@@ -1,4 +1,4 @@
-### `model_demo`中遇到的一些错误
+### 使用最新版本的langchain时遇到的一些错误
 
 1. `StructuredOutputParser`这个解析器好像用不了了，所以使用了`PydanticOutputParser`。
 2. **如果直接调用langchain封装的openai client的话，貌似会返回各种乱七八糟的不兼容错误**：
@@ -36,4 +36,4 @@ AttributeError: module 'langchain' has no attribute 'verbose'
 
 因此在`model_demo`中直接自己封装了llm client的invoke方法来处理模型调用。
 
-> 对书中的langchain.memory之类的也是这样，貌似直接从langchain import就会出现不兼容问题，需要注意。
+> 对书中的langchain.memory之类的也是这样，貌似直接从langchain import就会出现不兼容问题，需要注意。如果需要使用旧版的langchain的话需要用pip install安装使用低版本的，具体实现参见[lang_chain/v1](https://github.com/fyerfyer/llm-cookbook-learning/tree/main/lang_chain/v1)。
